@@ -501,7 +501,7 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 
 	//Check if an actual change was made
 	specimen.Updater = oldSpecimen.Updater
-	if cmp.Equal(specimen, oldSpecimen) {
+	if cmp.Equal(specimen, *oldSpecimen) {
 		return fmt.Errorf("Updated specimen is equivalent to old specimen. Operation aborted to conserve blockchain resources")
 	}
 	specimen.Updater = updater
@@ -610,6 +610,81 @@ func (s *SmartContract) GetHistory(ctx contractapi.TransactionContextInterface, 
 	buffer.WriteString("]")
 
 	return buffer.String(), nil
+}
+
+func (s *SmartContract) UpdateTaxonClass(ctx contractapi.TransactionContextInterface, collection string, username string, oldTaxon string, newTaxon string) (int, error) {
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return 0, fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return 0, fmt.Errorf("%s does not exist", username)
+	}
+
+	checkCollection, err := ctx.GetStub().GetState(collection)
+
+	if err != nil {
+		return 0, fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+	if checkCollection == nil {
+		return 0, fmt.Errorf("%s does not exists", collection)
+	}
+
+	collect := new(Collection)
+	_ = json.Unmarshal(checkCollection, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.TaxonClass, role) {
+		return 0, fmt.Errorf("%s has role %s but role %s is required to update taxon class", username, role, collect.TaxonClass)
+	}
+
+	resultsIterator, err := ctx.GetStub().GetStateByRange("", "")
+
+	if err != nil {
+		return 0, fmt.Errorf("Failed to get results Iterator for all specimens. %s", err.Error())
+	}
+	defer resultsIterator.Close()
+
+	specimensChanged := 0
+
+	for resultsIterator.HasNext() {
+		queryResponse, err := resultsIterator.Next()
+
+		if err != nil {
+			return 0, fmt.Errorf("Failed to get specimen. %s", err.Error())
+		}
+
+		specimen := new(Specimen)
+		_ = json.Unmarshal(queryResponse.Value, specimen)
+
+		if specimen.Collection == collection && specimen.Taxon == oldTaxon {
+			specimen.Taxon = newTaxon
+
+			specimenBytes, _ := json.Marshal(specimen)
+
+			err = ctx.GetStub().PutState(queryResponse.Key, specimenBytes)
+
+			if err != nil {
+				return 0, fmt.Errorf("Failed to put to world state. %s", err.Error())
+			}
+
+			specimensChanged += 1
+
+		}
+	}
+
+	return specimensChanged, nil
+
 }
 
 func main() {

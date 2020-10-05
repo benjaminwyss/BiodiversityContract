@@ -34,6 +34,9 @@ type Specimen struct {
 	Longitude       string `json:"longitude"`
 	Habitat         string `json:"habitat"`
 	Preparation     string `json:"preparation"`
+	Condition       string `json:"condition"`
+	Loans           string `json:"loans"`
+	Grants          string `json:"grants"`
 	Image           string `json:"image"`
 }
 
@@ -118,7 +121,7 @@ func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) error 
 		return fmt.Errorf("Failed to put public to world state. %s", err.Error())
 	}
 
-	sampleSpecimen := Specimen{"KU Ornithology", "manager", "32581", "2002-IC-062", "06/19/2003", "Bentley, Andy C", "Pygoplites diacanthus", "Greenfield, David W", "", "G02-15", "01/27/2002", "", "Fiji, Viti Levu", "18.1483325958", "-178.3984985352", "Barrier reef off Suva Point north of wreck in main channel", "", ""}
+	sampleSpecimen := Specimen{"KU Ornithology", "manager", "32581", "2002-IC-062", "06/19/2003", "Bentley, Andy C", "Pygoplites diacanthus", "Greenfield, David W", "", "G02-15", "01/27/2002", "", "Fiji, Viti Levu", "18.1483325958", "-178.3984985352", "Barrier reef off Suva Point north of wreck in main channel", "", "", "", "", ""}
 	specimenBytes, _ := json.Marshal(sampleSpecimen)
 	err = ctx.GetStub().PutState("0", specimenBytes)
 
@@ -318,7 +321,7 @@ func (s *SmartContract) GrantPermission(ctx contractapi.TransactionContextInterf
 
 }
 
-func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, image string) error {
+func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, condition string, image string) error {
 	checkExistence, err := ctx.GetStub().GetState(guid)
 
 	if err != nil {
@@ -364,7 +367,7 @@ func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid
 		return fmt.Errorf("%s has role %s but role %s is required to create specimen", updater, role, collect.CreateSpecimen)
 	}
 
-	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, image}
+	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, "", "", image}
 
 	specimenBytes, _ := json.Marshal(specimen)
 
@@ -497,7 +500,7 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 		}
 	}
 
-	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, image}
+	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, oldSpecimen.Condition, oldSpecimen.Loans, oldSpecimen.Grants, image}
 
 	//Check if an actual change was made
 	specimen.Updater = oldSpecimen.Updater
@@ -505,6 +508,264 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 		return fmt.Errorf("Updated specimen is equivalent to old specimen. Operation aborted to conserve blockchain resources")
 	}
 	specimen.Updater = updater
+
+	specimenBytes, _ := json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
+}
+
+func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, guid string, username string, condition string, loans string, grants string) error {
+	checkExistence, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkExistence == nil {
+		return fmt.Errorf("%s does not exists", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(checkExistence, specimen)
+
+	collectionBytes, _ := ctx.GetStub().GetState(specimen.Collection)
+	collect := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.PrimaryUpdate, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to update and override primary info", username, role, collect.PrimaryUpdate)
+	}
+
+	if condition != "" {
+		specimen.Condition = condition + "\n"
+	}
+	if loans != "" {
+		specimen.Loans = loans + "\n"
+	}
+	if grants != "" {
+		specimen.Grants = grants + "\n"
+	}
+
+	if condition == "None" {
+		specimen.Condition = ""
+	}
+	if loans == "None" {
+		specimen.Loans = ""
+	}
+	if grants == "None" {
+		specimen.Grants = ""
+	}
+
+	specimenBytes, _ := json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
+}
+
+func (s *SmartContract) UpdateCondition(ctx contractapi.TransactionContextInterface, guid string, username string, conditionDelta string, date string) error {
+	checkExistence, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkExistence == nil {
+		return fmt.Errorf("%s does not exists", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(checkExistence, specimen)
+
+	collectionBytes, _ := ctx.GetStub().GetState(specimen.Collection)
+	collect := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.SecondaryUpdate, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to update secondary info", username, role, collect.SecondaryUpdate)
+	}
+
+	specimen.Condition = specimen.Condition + conditionDelta + " " + date + "\n"
+
+	specimenBytes, _ := json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
+}
+
+func (s *SmartContract) RegisterLoan(ctx contractapi.TransactionContextInterface, guid string, username string, description string, loanee string, date string) error {
+	checkExistence, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkExistence == nil {
+		return fmt.Errorf("%s does not exists", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(checkExistence, specimen)
+
+	collectionBytes, _ := ctx.GetStub().GetState(specimen.Collection)
+	collect := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.RegisterLoan, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to register loans", username, role, collect.RegisterLoan)
+	}
+
+	specimen.Loans = specimen.Loans + "Loaned: " + description + " to " + loanee + " on " + date + "\n"
+
+	specimenBytes, _ := json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
+}
+
+func (s *SmartContract) ReturnLoan(ctx contractapi.TransactionContextInterface, guid string, username string, description string, loanee string, date string) error {
+	checkExistence, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkExistence == nil {
+		return fmt.Errorf("%s does not exists", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(checkExistence, specimen)
+
+	collectionBytes, _ := ctx.GetStub().GetState(specimen.Collection)
+	collect := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.RegisterLoan, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to register loans", username, role, collect.RegisterLoan)
+	}
+
+	specimen.Loans = specimen.Loans + "Returned: " + description + " to " + loanee + " on " + date + "\n"
+
+	specimenBytes, _ := json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
+}
+
+func (s *SmartContract) RegisterGrant(ctx contractapi.TransactionContextInterface, guid string, username string, description string, grantee string, date string) error {
+	checkExistence, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkExistence == nil {
+		return fmt.Errorf("%s does not exists", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(checkExistence, specimen)
+
+	collectionBytes, _ := ctx.GetStub().GetState(specimen.Collection)
+	collect := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.RegisterUse, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to register usage grants", username, role, collect.RegisterUse)
+	}
+
+	specimen.Grants = specimen.Grants + "Granted: " + description + " to " + grantee + " on " + date + "\n"
 
 	specimenBytes, _ := json.Marshal(specimen)
 

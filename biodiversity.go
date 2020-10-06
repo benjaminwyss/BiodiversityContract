@@ -151,6 +151,14 @@ func (s *SmartContract) RegisterCollection(ctx contractapi.TransactionContextInt
 		return fmt.Errorf("%s does not exists", username)
 	}
 
+	attributionString := fmt.Sprintf("Registered Collection %s", name)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	collection := Collection{name, createSpecimen, primaryUpdate, secondaryUpdate, georeference, linkImages, linkAuxiliary, taxonName, taxonClass, suggestTaxon, registerLoan, registerUse, query, flagError}
 	collectionBytes, _ := json.Marshal(collection)
 	err = ctx.GetStub().PutState(name, collectionBytes)
@@ -242,6 +250,14 @@ func (s *SmartContract) UpdateCollection(ctx contractapi.TransactionContextInter
 		flagError = oldCollection.FlagError
 	}
 
+	attributionString := fmt.Sprintf("Updated Collection %s access control policies", name)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	collection := Collection{name, createSpecimen, primaryUpdate, secondaryUpdate, georeference, linkImages, linkAuxiliary, taxonName, taxonClass, suggestTaxon, registerLoan, registerUse, query, flagError}
 	collectionBytes, _ := json.Marshal(collection)
 	return ctx.GetStub().PutState(name, collectionBytes)
@@ -315,6 +331,14 @@ func (s *SmartContract) GrantPermission(ctx contractapi.TransactionContextInterf
 		return fmt.Errorf("%s is not registered with collection %s", granterName, collection)
 	}
 
+	attributionString := fmt.Sprintf("Updated %s permission to %s in collection %s", username, permission, collection)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(granterName+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	user.Membership[collection] = permission
 	userBytes, _ := json.Marshal(user)
 	return ctx.GetStub().PutState(username, userBytes)
@@ -365,6 +389,14 @@ func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid
 
 	if !strings.Contains(collect.CreateSpecimen, role) {
 		return fmt.Errorf("%s has role %s but role %s is required to create specimen", updater, role, collect.CreateSpecimen)
+	}
+
+	attributionString := fmt.Sprintf("Created Specimen with GUID %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(updater+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
 	}
 
 	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, "", "", image}
@@ -509,6 +541,14 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 	}
 	specimen.Updater = updater
 
+	attributionString := fmt.Sprintf("Updated Specimen with GUID %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(updater+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	specimenBytes, _ := json.Marshal(specimen)
 
 	return ctx.GetStub().PutState(guid, specimenBytes)
@@ -575,6 +615,14 @@ func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, gu
 		specimen.Grants = ""
 	}
 
+	attributionString := fmt.Sprintf("Overrode condition, loan, and/or grant history for specimen with guid %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	specimenBytes, _ := json.Marshal(specimen)
 
 	return ctx.GetStub().PutState(guid, specimenBytes)
@@ -623,6 +671,14 @@ func (s *SmartContract) UpdateCondition(ctx contractapi.TransactionContextInterf
 
 	specimen.Condition = specimen.Condition + conditionDelta + " " + date + "\n"
 
+	attributionString := fmt.Sprintf("Updated condition for specimen with guid %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	specimenBytes, _ := json.Marshal(specimen)
 
 	return ctx.GetStub().PutState(guid, specimenBytes)
@@ -670,6 +726,14 @@ func (s *SmartContract) RegisterLoan(ctx contractapi.TransactionContextInterface
 	}
 
 	specimen.Loans = specimen.Loans + "Loaned: " + description + " to " + loanee + " on " + date + "\n"
+
+	attributionString := fmt.Sprintf("Registered loan for specimen with GUID %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
 
 	specimenBytes, _ := json.Marshal(specimen)
 
@@ -721,6 +785,14 @@ func (s *SmartContract) ReturnLoan(ctx contractapi.TransactionContextInterface, 
 
 	specimenBytes, _ := json.Marshal(specimen)
 
+	attributionString := fmt.Sprintf("Returned loan for specimen with GUID %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
+
 	return ctx.GetStub().PutState(guid, specimenBytes)
 }
 
@@ -766,6 +838,14 @@ func (s *SmartContract) RegisterGrant(ctx contractapi.TransactionContextInterfac
 	}
 
 	specimen.Grants = specimen.Grants + "Granted: " + description + " to " + grantee + " on " + date + "\n"
+
+	attributionString := fmt.Sprintf("Registered grant for specimen with GUID %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	}
 
 	specimenBytes, _ := json.Marshal(specimen)
 
@@ -942,6 +1022,14 @@ func (s *SmartContract) UpdateTaxonClass(ctx contractapi.TransactionContextInter
 			specimensChanged += 1
 
 		}
+	}
+
+	attributionString := fmt.Sprintf("Updated all %s taxons to %s in collection %s", oldTaxon, newTaxon, collection)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+	if err != nil {
+		return 0, fmt.Errorf("Failed to put to world state. %s", err.Error())
 	}
 
 	return specimensChanged, nil

@@ -64,8 +64,15 @@ type User struct {
 }
 
 type QueryResult struct {
-	Guid   string `json:"guid"`
-	Record *Specimen
+	Guid   string    `json:"guid"`
+	Record *Specimen `json:"specimen"`
+}
+
+type PendingTransaction struct {
+	Transaction string   `json:"transaction"`
+	Arguments   []string `json:"arguments"`
+	Suggester   string   `json:"suggester"`
+	Reason      string   `json:"reason"`
 }
 
 func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) error {
@@ -570,6 +577,97 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 	return ctx.GetStub().PutState(guid, specimenBytes)
 }
 
+func (s *SmartContract) SuggestUpdate(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, condition string, conditionDate string, notes string, image string, reason string) error {
+	checkExistence, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkExistence == nil {
+		return fmt.Errorf("%s does not exists", guid)
+	}
+
+	checkUpdater, err := ctx.GetStub().GetState(updater)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUpdater == nil {
+		return fmt.Errorf("%s does not exist", updater)
+	}
+
+	checkCollection, err := ctx.GetStub().GetState(collection)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+	if checkCollection == nil {
+		return fmt.Errorf("%s does not exists", collection)
+	}
+
+	collect := new(Collection)
+	_ = json.Unmarshal(checkCollection, collect)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUpdater, user)
+
+	role, ok := user.Membership[collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.FlagError, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to update primary info", updater, role, collect.FlagError)
+	}
+
+	pendingTransaction := PendingTransaction{"Update", []string{guid, collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, conditionDate, notes, image}, updater, reason}
+	pendingTransactionBytes, _ := json.Marshal(pendingTransaction)
+
+	attributionString := fmt.Sprintf("Suggested update to specimen with GUID %s", guid)
+	attributionBytes := []byte(attributionString)
+	err = ctx.GetStub().PutState(updater+"|attribution", attributionBytes)
+
+	return ctx.GetStub().PutState("pending"+guid, pendingTransactionBytes)
+
+}
+
+func (s *SmartContract) ApproveTransaction(ctx contractapi.TransactionContextInterface, guid string, username string) error {
+	checkTransaction, err := ctx.GetStub().GetState("pending" + guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkTransaction == nil {
+		return fmt.Errorf("Pending transaction for %s does not exists", guid)
+	}
+
+	transaction := new(PendingTransaction)
+	_ = json.Unmarshal(checkTransaction, transaction)
+
+	if transaction.Transaction == "Update" {
+		args := transaction.Arguments
+
+		notes := args[20]
+		if notes == "" {
+			notes = "Approved update suggested by user " + args[2]
+		} else {
+			notes = notes + "\n" + "Approved update suggested by user " + args[2]
+		}
+
+		attributionString := fmt.Sprintf("Approved suggested update to specimen with GUID %s", guid)
+		attributionBytes := []byte(attributionString)
+		err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
+
+		return s.Update(ctx, args[0], args[1], username, args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], notes, args[21])
+	}
+
+	return fmt.Errorf("Error, pending transaction name not valid.")
+}
+
 func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, guid string, username string, condition string, loans string, grants string, notes string) error {
 	checkExistence, err := ctx.GetStub().GetState(guid)
 
@@ -920,7 +1018,7 @@ func (s *SmartContract) GetHistory(ctx contractapi.TransactionContextInterface, 
 }
 
 func (s *SmartContract) QueryAllSpecimens(ctx contractapi.TransactionContextInterface) ([]QueryResult, error) {
-	recordIterator, err := ctx.GetStub().GetStateByRange("", "")
+	recordIterator, err := ctx.GetStub().GetStateByRange("0", "999999999999")
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get record iterator. %s", err.Error())

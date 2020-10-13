@@ -37,6 +37,7 @@ type Specimen struct {
 	Condition       string `json:"condition"`
 	Loans           string `json:"loans"`
 	Grants          string `json:"grants"`
+	Notes           string `json:"notes"`
 	Image           string `json:"image"`
 }
 
@@ -60,6 +61,11 @@ type Collection struct {
 type User struct {
 	Username   string            `json:"username"`
 	Membership map[string]string `json:"membership"`
+}
+
+type QueryResult struct {
+	Guid   string `json:"guid"`
+	Record *Specimen
 }
 
 func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) error {
@@ -121,7 +127,7 @@ func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) error 
 		return fmt.Errorf("Failed to put public to world state. %s", err.Error())
 	}
 
-	sampleSpecimen := Specimen{"KU Ornithology", "manager", "32581", "2002-IC-062", "06/19/2003", "Bentley, Andy C", "Pygoplites diacanthus", "Greenfield, David W", "", "G02-15", "01/27/2002", "", "Fiji, Viti Levu", "18.1483325958", "-178.3984985352", "Barrier reef off Suva Point north of wreck in main channel", "", "", "", "", ""}
+	sampleSpecimen := Specimen{"KU Ornithology", "manager", "32581", "2002-IC-062", "06/19/2003", "Bentley, Andy C", "Pygoplites diacanthus", "Greenfield, David W", "", "G02-15", "01/27/2002", "", "Fiji, Viti Levu", "18.1483325958", "-178.3984985352", "Barrier reef off Suva Point north of wreck in main channel", "", "", "", "", "", ""}
 	specimenBytes, _ := json.Marshal(sampleSpecimen)
 	err = ctx.GetStub().PutState("0", specimenBytes)
 
@@ -345,7 +351,7 @@ func (s *SmartContract) GrantPermission(ctx contractapi.TransactionContextInterf
 
 }
 
-func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, condition string, image string) error {
+func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, condition string, notes string, image string) error {
 	checkExistence, err := ctx.GetStub().GetState(guid)
 
 	if err != nil {
@@ -399,14 +405,14 @@ func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid
 		return fmt.Errorf("Failed to put to world state. %s", err.Error())
 	}
 
-	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, "", "", image}
+	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, "", "", notes, image}
 
 	specimenBytes, _ := json.Marshal(specimen)
 
 	return ctx.GetStub().PutState(guid, specimenBytes)
 }
 
-func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, image string) error {
+func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid string, collection string, updater string, catalogNumber string, accessionNumber string, catalogDate string, cataloger string, taxon string, determiner string, determineDate string, fieldNumber string, fieldDate string, collector string, location string, latitude string, longitude string, habitat string, preparation string, condition string, conditionDate string, notes string, image string) error {
 	checkExistence, err := ctx.GetStub().GetState(guid)
 
 	if err != nil {
@@ -500,6 +506,16 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 	if preparation == "" {
 		preparation = oldSpecimen.Preparation
 	}
+	if condition == "" {
+		condition = oldSpecimen.Condition + condition + " " + conditionDate + "\n"
+	} else {
+		condition = oldSpecimen.Condition
+	}
+	if notes != "" {
+		notes = oldSpecimen.Notes + "\n" + notes
+	} else {
+		notes = oldSpecimen.Notes
+	}
 	if image == "" {
 		image = oldSpecimen.Image
 	}
@@ -514,7 +530,7 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 		}
 	}
 
-	if habitat != oldSpecimen.Habitat || preparation != oldSpecimen.Preparation {
+	if habitat != oldSpecimen.Habitat || preparation != oldSpecimen.Preparation || condition != oldSpecimen.Condition || notes != oldSpecimen.Notes {
 		if !strings.Contains(collect.SecondaryUpdate, role) {
 			return fmt.Errorf("%s has role %s but role %s is required to update secondary info", updater, role, collect.SecondaryUpdate)
 		}
@@ -532,7 +548,7 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 		}
 	}
 
-	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, oldSpecimen.Condition, oldSpecimen.Loans, oldSpecimen.Grants, image}
+	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, oldSpecimen.Loans, oldSpecimen.Grants, notes, image}
 
 	//Check if an actual change was made
 	specimen.Updater = oldSpecimen.Updater
@@ -554,7 +570,7 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 	return ctx.GetStub().PutState(guid, specimenBytes)
 }
 
-func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, guid string, username string, condition string, loans string, grants string) error {
+func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, guid string, username string, condition string, loans string, grants string, notes string) error {
 	checkExistence, err := ctx.GetStub().GetState(guid)
 
 	if err != nil {
@@ -604,6 +620,9 @@ func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, gu
 	if grants != "" {
 		specimen.Grants = grants + "\n"
 	}
+	if notes != "" {
+		specimen.Notes = notes
+	}
 
 	if condition == "None" {
 		specimen.Condition = ""
@@ -614,64 +633,11 @@ func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, gu
 	if grants == "None" {
 		specimen.Grants = ""
 	}
-
-	attributionString := fmt.Sprintf("Overrode condition, loan, and/or grant history for specimen with guid %s", guid)
-	attributionBytes := []byte(attributionString)
-	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
-
-	if err != nil {
-		return fmt.Errorf("Failed to put to world state. %s", err.Error())
+	if notes == "None" {
+		specimen.Notes = ""
 	}
 
-	specimenBytes, _ := json.Marshal(specimen)
-
-	return ctx.GetStub().PutState(guid, specimenBytes)
-}
-
-func (s *SmartContract) UpdateCondition(ctx contractapi.TransactionContextInterface, guid string, username string, conditionDelta string, date string) error {
-	checkExistence, err := ctx.GetStub().GetState(guid)
-
-	if err != nil {
-		return fmt.Errorf("Failed to read from world state. %s", err.Error())
-	}
-
-	if checkExistence == nil {
-		return fmt.Errorf("%s does not exists", guid)
-	}
-
-	checkUser, err := ctx.GetStub().GetState(username)
-
-	if err != nil {
-		return fmt.Errorf("Failed to read from world state. %s", err.Error())
-	}
-
-	if checkUser == nil {
-		return fmt.Errorf("%s does not exist", username)
-	}
-
-	specimen := new(Specimen)
-	_ = json.Unmarshal(checkExistence, specimen)
-
-	collectionBytes, _ := ctx.GetStub().GetState(specimen.Collection)
-	collect := new(Collection)
-	_ = json.Unmarshal(collectionBytes, collect)
-
-	user := new(User)
-	_ = json.Unmarshal(checkUser, user)
-
-	role, ok := user.Membership[specimen.Collection]
-
-	if !ok {
-		role = "P"
-	}
-
-	if !strings.Contains(collect.SecondaryUpdate, role) {
-		return fmt.Errorf("%s has role %s but role %s is required to update secondary info", username, role, collect.SecondaryUpdate)
-	}
-
-	specimen.Condition = specimen.Condition + conditionDelta + " " + date + "\n"
-
-	attributionString := fmt.Sprintf("Updated condition for specimen with guid %s", guid)
+	attributionString := fmt.Sprintf("Overrode condition, loan, grant, and/or notes history for specimen with guid %s", guid)
 	attributionBytes := []byte(attributionString)
 	err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
 
@@ -951,6 +917,37 @@ func (s *SmartContract) GetHistory(ctx contractapi.TransactionContextInterface, 
 	buffer.WriteString("]")
 
 	return buffer.String(), nil
+}
+
+func (s *SmartContract) QueryAllSpecimens(ctx contractapi.TransactionContextInterface) ([]QueryResult, error) {
+	recordIterator, err := ctx.GetStub().GetStateByRange("", "")
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get record iterator. %s", err.Error())
+	}
+
+	defer recordIterator.Close()
+
+	results := []QueryResult{}
+
+	for recordIterator.HasNext() {
+		response, err := recordIterator.Next()
+
+		if err != nil {
+			return nil, fmt.Errorf("Error. %s", err.Error())
+		}
+
+		specimen := new(Specimen)
+
+		err = json.Unmarshal(response.Value, specimen)
+		if err == nil {
+			result := QueryResult{response.Key, specimen}
+			results = append(results, result)
+		}
+
+	}
+
+	return results, nil
 }
 
 func (s *SmartContract) UpdateTaxonClass(ctx contractapi.TransactionContextInterface, collection string, username string, oldTaxon string, newTaxon string) (int, error) {

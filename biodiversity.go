@@ -531,13 +531,19 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 		return fmt.Errorf("collection %s does not match existing specimen collection %s", collection, oldSpecimen.Collection)
 	}
 
-	if catalogNumber != oldSpecimen.CatalogNumber || accessionNumber != oldSpecimen.AccessionNumber || catalogDate != oldSpecimen.CatalogDate || cataloger != oldSpecimen.Cataloger || fieldNumber != oldSpecimen.FieldNumber || fieldDate != oldSpecimen.FieldDate || collector != oldSpecimen.Collector || location != oldSpecimen.Location || latitude != oldSpecimen.Latitude || longitude != oldSpecimen.Longitude {
+	if catalogNumber != oldSpecimen.CatalogNumber || accessionNumber != oldSpecimen.AccessionNumber || catalogDate != oldSpecimen.CatalogDate || cataloger != oldSpecimen.Cataloger || fieldNumber != oldSpecimen.FieldNumber || fieldDate != oldSpecimen.FieldDate || collector != oldSpecimen.Collector {
 		if !strings.Contains(collect.PrimaryUpdate, role) {
 			return fmt.Errorf("%s has role %s but role %s is required to update primary info", updater, role, collect.PrimaryUpdate)
 		}
 	}
 
-	if habitat != oldSpecimen.Habitat || preparation != oldSpecimen.Preparation || condition != oldSpecimen.Condition || notes != oldSpecimen.Notes {
+	if location != oldSpecimen.Location || latitude != oldSpecimen.Latitude || longitude != oldSpecimen.Longitude || habitat != oldSpecimen.Habitat {
+		if !strings.Contains(collect.Georeference, role) {
+			return fmt.Errorf("%s has role %s but role %s is required to update geolocation info", updater, role, collect.Georeference)
+		}
+	}
+
+	if preparation != oldSpecimen.Preparation || condition != oldSpecimen.Condition || notes != oldSpecimen.Notes {
 		if !strings.Contains(collect.SecondaryUpdate, role) {
 			return fmt.Errorf("%s has role %s but role %s is required to update secondary info", updater, role, collect.SecondaryUpdate)
 		}
@@ -671,7 +677,7 @@ func (s *SmartContract) ApproveTransaction(ctx contractapi.TransactionContextInt
 	index, err := strconv.Atoi(transactionIndex)
 
 	if err != nil {
-		return fmt.Errorf("Error. Provided pending transaction indexd is not an integer. %s", err.Error())
+		return fmt.Errorf("Error. Provided pending transaction index is not an integer. %s", err.Error())
 	}
 
 	if index < 0 || index >= len(transactions) {

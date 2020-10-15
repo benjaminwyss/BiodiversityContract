@@ -1,0 +1,271 @@
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Connecting to the Fabric Network in Node.js
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+try 
+  {
+    // load the network configuration (This assumes the file structure )
+    const ccpPath = path.resolve(__dirname, '..', 'crypto-config', 'peerOrganizations', 'org1.example.com', 'connectionprofile.json');
+    const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+
+    // Create a new file system based wallet for managing identities.
+    const walletPath = path.join(process.cwd(), '../wallet');
+    const wallet = await Wallets.newFileSystemWallet(walletPath);
+
+    // Check to see if we've already enrolled the user.
+    const identity = await wallet.get('user');
+    if (!identity) 
+    {
+      console.log('An identity for the user "user" does not exist in the wallet');
+      exit;
+    }
+
+    // Create a new gateway for connecting to our peer node.
+    const gateway = new Gateway();
+    await gateway.connect(ccp, { wallet, identity: 'user', discovery: { enabled: false, asLocalhost: false } });
+
+    // Get the network (channel) our contract is deployed to.
+    const network = await gateway.getNetwork('mychannel');
+
+    // Get the contract from the network.
+    const contract = network.getContract('biodiversity');
+
+    // Once the contract object is initialized, you can start evaluating queries and submitting transactions!
+    // Here's how you can issue a sample query
+
+    const result = await contract.evaluateTransaction(transactionName, parameter1, parameter2, ..., parameterN)
+
+    // When you are done with the blockchain connection, disconnect from the gateway as shown below
+    // Disconnect from the gateway.
+    await gateway.disconnect();
+        
+  } 
+  catch (error) 
+  {
+    console.error(`Failed to evaluate transaction: ${error}`);
+    exit;
+  }
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+JSON Objects and Their Fields
+
+---Format---
+
+Object Name
+
+Object fields as list of {name (type) : description}
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Specimen
+
+collection      (string) : name of the collection which the specimen belongs to
+updater         (string) : username of the user who made the most recent update to the specimen
+catalogNumber   (string) : catalog number of specimen
+accessionNumber (string) : accession number of specimen
+catalogDate     (string) : catalog date of specimen
+cataloger       (string) : name of specimen cataloger
+taxon           (string) : specimen taxon in Genus Species format
+determiner      (string) : name of taxon determiner
+determineDate   (string) : date of taxon determination
+fieldNumber     (string) : field number of specimen
+fieldDate       (string) : field date of specimen
+collector       (string) : name of field collector
+location        (string) : description of field location, typically includes country and city
+latitude        (string) : latitude of field location
+longitude       (string) : longitude of field location
+habitat         (string) : description of the habitat of field location
+preparation     (string) : description of specimen preparation type
+condition       (string) : append-only list of changes to specimen condition
+loans           (string) : append-only list of loaned specimen parts
+grants          (string) : append-only list of granted specimen parts
+notes           (string) : append-only list of auxiliary notes and acknowledgements
+image           (string) : hash of the base64 encoding of an uploaded specimen image
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+QueryResult
+
+guid        (string)    : globally unique identifier of specimen (primary key)
+specimen    (Specimen)  : JSON Specimen object corresponding to guid
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Collection
+
+name            (string)  : unique name of collection (primary key)
+createSpecimen  (string)  : which roles have the permission to create new specimens (should be a substring of "MCASP")
+primaryUpdate   (string)  : which roles have the permission to update specimen primary info (should be a substring of "MCASP")
+secondaryUpdate (string)  : which roles have the permission to update specimen secondary info (should be a substring of "MCASP")
+georeference    (string)  : which roles have the permission to update specimen geolocation info (should be a substring of "MCASP")
+linkImages      (string)  : which roles have the permission to link specimen images (should be a substring of "MCASP")
+linkAuxiliary   (string)  : which roles have the permission to link other auxiliary data (e.g. bird song recordings) (should be a substring of "MCASP")
+taxonName       (string)  : which roles have the permission to update individual specimen taxons (should be a substring of "MCASP")
+taxonClass      (string)  : which roles have the permission to globally update a taxon class (e.g. replace all instances of one taxon with another) (should be a substring of "MCASP")
+suggestTaxon    (string)  : which roles have the permission to suggest updates to individual specimen taxons (should be a substring of "MCASP")
+registerLoan    (string)  : which roles have the permission to register loaned parts of specimens (should be a substring of "MCASP")
+registerUse     (string)  : which roles have the permission to register granted parts of specimens (should be a substring of "MCASP")
+query           (string)  : which roles have the permission to query individual specimens (should be a substring of "MCASP")
+flagError       (string)  : which roles have the permission to flag errors and suggest updates to specimens (should be a substring of "MCASP")
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+User
+
+username    (string)              : unique username of user (primary key)
+membership  ( {string: string} )  : map object which maps collection names to the user's role in that collection (role is either "M", "C", "A", "S", or "P")
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+PendingTransaction
+
+transaction (string)      : name of pending transaction (e.g. "Update")
+arguments   ( [string] )  : string array of pending transaction arguments
+suggester   (string)      : username of user who suggested the pending transaction
+reason      (string)      : user supplied reason as to why they suggested the pending transaction
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+Queries and Transactions Available
+
+Note: parameters are ALWAYS passed as strings
+
+---Format---
+
+Query/Transaction Name
+
+Description
+
+Parameters as list of {name : description}
+
+Sample Usage(s) in Node.js
+Note: If a query or transaction fails, an error will be thrown. Make sure to execute queries and transactions in try/catch blocks
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Query
+
+Queries a single specimen and returns it as a JSON Specimen object
+
+guid      : globally unique identifier for the target specimen
+username  : username of user issueing query (used to check permissions)
+
+const specimen = await contract.evaluateTransaction('Query', guid, username);
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+QueryAllSpecimens
+
+Fetches all specimens and their guids, returning them as an array of JSON QueryResult objects
+
+No Parameters
+
+const allSpecimens = await contract.evaluateTransaction('QueryAllSpecimens');
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+GetHistory
+
+Fetches the entire ledger history of a specified key and returns it as a JSON array of objects in the format {TxID, Value, Timestamp, IsDelete}
+Note: Value will be JSON object whose type depending on the specified key
+
+key : key of the object to fetch the entire ledger history of
+
+//get history of a specimen
+const specimenHistory = await contract.evaluateTransaction('GetHistory', guid)
+
+//get history of a user's memberships
+const membershipHistory = await contract.evaluateTransaction('GetHistory', username)
+
+//get history of a user's contributions
+const contributionHistory = await contract.evaluateTransaction('GetHistory', username + '|attribution')
+
+//get history of a collection's permission rules
+const collectionHistory = await contract.evaluateTransaction('GetHistory', collection)
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+RegisterCollection
+
+Registers a new biodiversity collection and assigns the user issuing this transaction the role of collection manager
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+UpdateCollection
+
+Updates the permission rules of the specified collection
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+RegisterUser
+
+Registers a new user on the blockchain with the provided username and initializes them with an empty collection membership map
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+GrantPermission
+
+Grants a specified user a specified role within a specified biodiversity collection
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Create
+
+Creates a new specimen in a given biodiversity collection
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Update
+
+Updates information relating to a specimen in a given biodiversity collection
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+UpdateTaxonClass
+
+Globally updates all instances of one taxon to another within a given biodiversity collection
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+RegisterLoan
+
+Regiseters a loan of a part of a specimen
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+ReturnLoan
+
+Returns a loan of a part of a specimen
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+RegisterGrant
+
+Registers a grant of a part of a specimen
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Override
+
+Override the content of one or more append-only list fields for a given specimen
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+SuggestUpdate
+
+Creates a PendingTransaction suggesting an update to a specific specimen
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+ApproveTransaction
+
+Approves a PendingTransaction and submits it to the blockchain
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+DenyTransaction
+
+Denies a PendingTransaction and removes it from the current list of PendingTransactions
+
+----------------------------------------------------------------------------------------------------------------------------------------------

@@ -513,13 +513,13 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 	if preparation == "" {
 		preparation = oldSpecimen.Preparation
 	}
-	if condition == "" {
+	if condition != "" {
 		condition = oldSpecimen.Condition + condition + " " + conditionDate + "\n"
 	} else {
 		condition = oldSpecimen.Condition
 	}
 	if notes != "" {
-		notes = oldSpecimen.Notes + "\n" + notes
+		notes = oldSpecimen.Notes + notes + "\n"
 	} else {
 		notes = oldSpecimen.Notes
 	}
@@ -598,6 +598,12 @@ func (s *SmartContract) SuggestUpdate(ctx contractapi.TransactionContextInterfac
 		return fmt.Errorf("%s does not exist", updater)
 	}
 
+	if collection == "" {
+		specimen := new(Specimen)
+		_ = json.Unmarshal(checkExistence, specimen)
+		collection = specimen.Collection
+	}
+
 	checkCollection, err := ctx.GetStub().GetState(collection)
 
 	if err != nil {
@@ -620,33 +626,59 @@ func (s *SmartContract) SuggestUpdate(ctx contractapi.TransactionContextInterfac
 	}
 
 	if !strings.Contains(collect.FlagError, role) {
-		return fmt.Errorf("%s has role %s but role %s is required to update primary info", updater, role, collect.FlagError)
+		return fmt.Errorf("%s has role %s but role %s is required to suggest updates", updater, role, collect.FlagError)
+	}
+
+	checkPendingTransactions, err := ctx.GetStub().GetState("pending" + guid)
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	pendingTransactions := []PendingTransaction{}
+
+	if checkPendingTransactions != nil {
+		_ = json.Unmarshal(checkPendingTransactions, &pendingTransactions)
 	}
 
 	pendingTransaction := PendingTransaction{"Update", []string{guid, collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, conditionDate, notes, image}, updater, reason}
-	pendingTransactionBytes, _ := json.Marshal(pendingTransaction)
+
+	pendingTransactions = append(pendingTransactions, pendingTransaction)
+
+	pendingTransactionsBytes, _ := json.Marshal(pendingTransactions)
 
 	attributionString := fmt.Sprintf("Suggested update to specimen with GUID %s", guid)
 	attributionBytes := []byte(attributionString)
 	err = ctx.GetStub().PutState(updater+"|attribution", attributionBytes)
 
-	return ctx.GetStub().PutState("pending"+guid, pendingTransactionBytes)
+	return ctx.GetStub().PutState("pending"+guid, pendingTransactionsBytes)
 
 }
 
-func (s *SmartContract) ApproveTransaction(ctx contractapi.TransactionContextInterface, guid string, username string) error {
-	checkTransaction, err := ctx.GetStub().GetState("pending" + guid)
+func (s *SmartContract) ApproveTransaction(ctx contractapi.TransactionContextInterface, guid string, username string, transactionIndex string) error {
+	checkTransactions, err := ctx.GetStub().GetState("pending" + guid)
 
 	if err != nil {
 		return fmt.Errorf("Failed to read from world state. %s", err.Error())
 	}
 
-	if checkTransaction == nil {
+	if checkTransactions == nil {
 		return fmt.Errorf("Pending transaction for %s does not exists", guid)
 	}
 
-	transaction := new(PendingTransaction)
-	_ = json.Unmarshal(checkTransaction, transaction)
+	transactions := []PendingTransaction{}
+	_ = json.Unmarshal(checkTransactions, &transactions)
+
+	index, err := strconv.Atoi(transactionIndex)
+
+	if err != nil {
+		return fmt.Errorf("Error. Provided pending transaction indexd is not an integer. %s", err.Error())
+	}
+
+	if index < 0 || index >= len(transactions) {
+		return fmt.Errorf("Error. Provided pending transaction index does not correspond to an existing pending transaction.")
+	}
+
+	transaction := transactions[index]
 
 	if transaction.Transaction == "Update" {
 		args := transaction.Arguments
@@ -662,10 +694,96 @@ func (s *SmartContract) ApproveTransaction(ctx contractapi.TransactionContextInt
 		attributionBytes := []byte(attributionString)
 		err = ctx.GetStub().PutState(username+"|attribution", attributionBytes)
 
+		//remove the approved transaction from the list of pending transactions
+		transactions = append(transactions[:index], transactions[index+1:]...)
+		transactionsBytes, _ := json.Marshal(transactions)
+		ctx.GetStub().PutState("pending"+guid, transactionsBytes)
+
 		return s.Update(ctx, args[0], args[1], username, args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], notes, args[21])
+
 	}
 
 	return fmt.Errorf("Error, pending transaction name not valid.")
+}
+
+func (s *SmartContract) DenyTransaction(ctx contractapi.TransactionContextInterface, guid string, username string, transactionIndex string) error {
+	checkTransactions, err := ctx.GetStub().GetState("pending" + guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkTransactions == nil {
+		return fmt.Errorf("Pending transaction for %s does not exists", guid)
+	}
+
+	transactions := []PendingTransaction{}
+	_ = json.Unmarshal(checkTransactions, &transactions)
+
+	index, err := strconv.Atoi(transactionIndex)
+
+	if err != nil {
+		return fmt.Errorf("Error. Provided pending transaction indexd is not an integer. %s", err.Error())
+	}
+
+	if index < 0 || index >= len(transactions) {
+		return fmt.Errorf("Error. Provided pending transaction index does not correspond to an existing pending transaction.")
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	checkSpecimen, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkSpecimen == nil {
+		return fmt.Errorf("specimen with guid %s does not exist", guid)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(checkSpecimen, specimen)
+
+	collection := specimen.Collection
+
+	checkCollection, err := ctx.GetStub().GetState(collection)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkCollection == nil {
+		return fmt.Errorf("Collection %s does not exist", collection)
+	}
+
+	collect := new(Collection)
+	_ = json.Unmarshal(checkCollection, collect)
+
+	role, ok := user.Membership[collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collect.PrimaryUpdate, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to update primary info", username, role, collect.PrimaryUpdate)
+	}
+
+	transactions = append(transactions[:index], transactions[index+1:]...)
+	transactionsBytes, _ := json.Marshal(transactions)
+	return ctx.GetStub().PutState("pending"+guid, transactionsBytes)
 }
 
 func (s *SmartContract) Override(ctx contractapi.TransactionContextInterface, guid string, username string, condition string, loans string, grants string, notes string) error {

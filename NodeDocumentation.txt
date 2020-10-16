@@ -110,7 +110,6 @@ registerUse     (string)  : which roles have the permission to register granted 
 query           (string)  : which roles have the permission to query individual specimens (should be a substring of "MCASP")
 flagError       (string)  : which roles have the permission to flag errors and suggest updates to specimens (should be a substring of "MCASP")
 
-
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 User
@@ -128,6 +127,7 @@ suggester   (string)      : username of user who suggested the pending transacti
 reason      (string)      : user supplied reason as to why they suggested the pending transaction
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
+
 Queries and Transactions Available
 
 Note: parameters are ALWAYS passed as strings
@@ -155,6 +155,7 @@ username  : username of user issueing query (used to check permissions)
 const specimen = await contract.evaluateTransaction('Query', guid, username);
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
+
 QueryAllSpecimens
 
 Fetches all specimens and their guids, returning them as an array of JSON QueryResult objects
@@ -168,7 +169,7 @@ const allSpecimens = await contract.evaluateTransaction('QueryAllSpecimens');
 GetHistory
 
 Fetches the entire ledger history of a specified key and returns it as a JSON array of objects in the format {TxID, Value, Timestamp, IsDelete}
-Note: Value will be JSON object whose type depending on the specified key
+Note: Value will be JSON object whose type depends on the specified key
 
 key : key of the object to fetch the entire ledger history of
 
@@ -189,12 +190,51 @@ const collectionHistory = await contract.evaluateTransaction('GetHistory', colle
 RegisterCollection
 
 Registers a new biodiversity collection and assigns the user issuing this transaction the role of collection manager
+Note: each parameter other than name and username must be a substring of "MCASP"
+
+name            : name of the collection
+username        : username of the individual creating the collection who will become the collection manager of that collection
+createSpecimen  : which roles have the permission to create new specimens
+primaryUpdate   : which roles have the permission to update specimens' primary info
+secondaryUpdate : which roles have the permission to update specimens' secondary info
+georeference    : which roles have the permission to update specimens' geolocation info
+linkImages      : which roles have the permission to upload specimens' images
+linkAuxiliary   : which roles have the permission to upload other auxiliary info for specimens (e.g. bird song recordings)
+taxonName       : which roles have the permission to update individual specimen's taxon names
+taxonClass      : which roles have the permission to globally update a taxon class (e.g. replace all instances of one taxon with another)
+suggestTaxon    : which roles have the permission to suggest updates to individual specimen taxons
+registerLoan    : which roles have the permission to register loaned parts of specimens
+registerUse     : which roles have the permission to register granted parts of specimens
+query           : which roles have the permission to query individual specimens
+flagError       : which roles have the permission to flag errors and suggest updates to specimens
+
+await contract.submitTransaction('RegisterCollection', name, username, createSpecimen, primaryUpdate, secondaryUpdate, georeference, linkImages, linkAuxiliary, taxonName, taxonClass, suggestTaxon, registerLoan, registerUse, query, flagError)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 UpdateCollection
 
 Updates the permission rules of the specified collection
+Note: each parameter other than name and username must be a substring of "MCASP"
+Note: permission rules parameters that are blank (param == "") indicates that no change should be made to the existing permission rule
+
+name            : name of the collection to be updated
+username        : username of the individual attempting to update the collection's permission rules (must be the collection manager or transaction will fail)
+createSpecimen  : which roles have the permission to create new specimens
+primaryUpdate   : which roles have the permission to update specimens' primary info
+secondaryUpdate : which roles have the permission to update specimens' secondary info
+georeference    : which roles have the permission to update specimens' geolocation info
+linkImages      : which roles have the permission to upload specimens' images
+linkAuxiliary   : which roles have the permission to upload other auxiliary info for specimens (e.g. bird song recordings)
+taxonName       : which roles have the permission to update individual specimen's taxon names
+taxonClass      : which roles have the permission to globally update a taxon class (e.g. replace all instances of one taxon with another)
+suggestTaxon    : which roles have the permission to suggest updates to individual specimen taxons
+registerLoan    : which roles have the permission to register loaned parts of specimens
+registerUse     : which roles have the permission to register granted parts of specimens
+query           : which roles have the permission to query individual specimens
+flagError       : which roles have the permission to flag errors and suggest updates to specimens
+
+await contract.submitTransaction('UpdateCollection', name, username, createSpecimen, primaryUpdate, secondaryUpdate, georeference, linkImages, linkAuxiliary, taxonName, taxonClass, suggestTaxon, registerLoan, registerUse, query, flagError)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -202,70 +242,212 @@ RegisterUser
 
 Registers a new user on the blockchain with the provided username and initializes them with an empty collection membership map
 
+username  : username of the new user to be registered (must be unique or transaction will fail)
+
+await contract.submitTransaction('RegisterUser', username)
+
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 GrantPermission
 
 Grants a specified user a specified role within a specified biodiversity collection
 
+granterName : username of the individual granting a permission role to another user (must have role "M" or "C" for the specified collection or this transaction will fail)
+username    : username of the individual receiving a permission role
+collection  : name of collection for which the permission role is being granted
+permission  : permission role to be granted (must be either "M", "C", "A", "S", or "P". granters with role "C" cannot grant role "M" and cannot demote users with role "M")
+
+await contract.submitTransaction('GrantPermission', granterName, username, collection, permission)
+
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 Create
 
 Creates a new specimen in a given biodiversity collection
+Note: It is okay to leave parameters which correspond to specimen info blank (param == "")
+
+guid            : globally unique identifier for specimen (must be unique)
+collection      : name of the collection which the specimen is being created in
+updater         : username of the user who is creating the specimen (updater's role must be within the given collection's createSpecimen permission rule or transaction will fail)
+catalogNumber   : catalog number of specimen
+accessionNumber : accession number of specimen
+catalogDate     : catalog date of specimen
+cataloger       : name of specimen cataloger
+taxon           : specimen taxon in Genus Species format
+determiner      : name of taxon determiner
+determineDate   : date of taxon determination
+fieldNumber     : field number of specimen
+fieldDate       : field date of specimen
+collector       : name of field collector
+location        : description of field location, typically includes country and city
+latitude        : latitude of field location
+longitude       : longitude of field location
+habitat         : description of the habitat of field location
+preparation     : description of specimen preparation type
+condition       : initial entries in append-only list of changes to specimen condition
+notes           : initial entires in append-only list of auxiliary notes and acknowledgements
+image           : hash of the base64 encoding of an uploaded specimen image
+
+await contract.submitTransaction('Create', guid, collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, notes, image)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 Update
 
 Updates information relating to a specimen in a given biodiversity collection
+Note: specimen info parameters left blank (param == "") indicates that no change will be made to that specific field
+
+guid            : globally unique identifier for specimen (must already exist)
+collection      : collection which the specimen belongs to (currently, transferring specimens to other collections is not permitted)
+updater         : username of the user who is updating the specimen's info (updater's role must be within the given collection's permission rules according to what fields they update)
+catalogNumber   : catalog number of specimen
+accessionNumber : accession number of specimen
+catalogDate     : catalog date of specimen
+cataloger       : name of specimen cataloger
+taxon           : specimen taxon in Genus Species format
+determiner      : name of taxon determiner
+determineDate   : date of taxon determination
+fieldNumber     : field number of specimen
+fieldDate       : field date of specimen
+collector       : name of field collector
+location        : description of field location, typically includes country and city
+latitude        : latitude of field location
+longitude       : longitude of field location
+habitat         : description of the habitat of field location
+preparation     : description of specimen preparation type
+condition       : new entry in append-only list of changes to specimen condition
+conditionDate   : date of change to specimen condition
+notes           : new entry in append-only list of auxiliary notes and acknowledgements
+image           : hash of the base64 encoding of an uploaded specimen image
+
+await contract.submitTransaction('Update', guid, collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, conditionDate, notes, image)
 
 ---------------------------------------------------------------------------------------------------------------------------------------------
 
 UpdateTaxonClass
 
-Globally updates all instances of one taxon to another within a given biodiversity collection
+Globally updates all instances of one taxon to another within a given biodiversity collection and returns a count of how many records were altered
+
+collection  : collection for which all instances of oldTaxon will be replaced with instances of newTaxon
+username    : username of the user who is updating all instances of a taxon class (user's role must be within the given collection's permission rules for taxonClass or the transaction will fail)
+oldTaxon    : old taxon that will be replaced
+newTaxon    : new taxon that will replace all instances of the old taxon
+
+const recordsAltered = await contract.submitTransaction('UpdateTaxonClass', username, oldTaxon, newTaxon)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 RegisterLoan
 
-Regiseters a loan of a part of a specimen
+Regiseters a loan of a part of a specimen and updates the loans append-only list for that specimen
+
+guid        : globally unique identifier for specimen (must already exist)
+username    : username of user registering the loan (user's role must be within the specimen's collection permission rules for registerLoan or the transaction will fail)
+description : description of what part of the specimen is being loaned
+loanee      : name of individual or organization receiving the loan
+date        : date of loan transfer
+
+await contract.submitTransaction('RegisterLoan', guid, username, description, loanee, date)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 ReturnLoan
 
-Returns a loan of a part of a specimen
+Returns a loan of a part of a specimen and updates the loans append-only list for that specimen
+
+guid        : globally unique identifier for specimen (must already exist)
+username    : username of user registering the return of the loan (user's role must be within the specimen's collection permission rules for registerLoan or the transaction will fail)
+description : description of what part of the specimen was loaned and now returned
+loanee      : name of individual or organization who received the loan that is now returned
+date        : date of loan return
+
+await contract.submitTransaction('ReturnLoan', guid, username, description, loanee, date)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 RegisterGrant
 
-Registers a grant of a part of a specimen
+Registers a grant of a part of a specimen and updates the grants append-only list for that specimen
+
+guid        : globally unique identifier for specimen (must already exist)
+username    : username of user registering the grant (user's role must be within the specimen's collection permission rules for registerUse or the transaction will fail)
+description : description of what part of the specimen is being granted 
+grantee     : name of individual or organization receiving the grant
+date        : date of grant transfer
+
+await contract.submitTransaction('RegisterGrant', guid, username, description, grantee, date)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 Override
 
 Override the content of one or more append-only list fields for a given specimen
+Note: override target parameters left blank (param == "") indicates that no change should be made to the corresponding append-only list
+Note: override target parameters set to None (param == "None") indicates that the corresponding append-only list should be set to an empty string ("")
+
+guid      : globally unique identifier for specimen (must already exist)
+username  : username of the user overriding one or more append-only list fields of the specimen (user's roles must be within the given collection's permission rules for primaryUpdate or the transaction will fail)
+condition : override target for condition append-only list
+loans     : override target for loans append-only list
+grants    : override target for grants append-only list
+notes     : override target for notes append-only list
+
+await contract.submitTransaction('Override', guid, username, condition, loans, grants, notes)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 SuggestUpdate
 
-Creates a PendingTransaction suggesting an update to a specific specimen
+Creates a PendingTransaction suggesting an update to a specific specimen and appends it to that specimen's current list of PendingTransactions
+
+guid            : globally unique identifier for specimen (must already exist)
+collection      : collection which the specimen belongs to (currently, transferring specimens to other collections is not permitted)
+updater         : username of the user who is suggesting updating the specimen's info (user's role must be within the given collection's permission rules for flagError or the transaction will fail)
+catalogNumber   : catalog number of specimen
+accessionNumber : accession number of specimen
+catalogDate     : catalog date of specimen
+cataloger       : name of specimen cataloger
+taxon           : specimen taxon in Genus Species format
+determiner      : name of taxon determiner
+determineDate   : date of taxon determination
+fieldNumber     : field number of specimen
+fieldDate       : field date of specimen
+collector       : name of field collector
+location        : description of field location, typically includes country and city
+latitude        : latitude of field location
+longitude       : longitude of field location
+habitat         : description of the habitat of field location
+preparation     : description of specimen preparation type
+condition       : new entry in append-only list of changes to specimen condition
+conditionDate   : date of change to specimen condition
+notes           : new entry in append-only list of auxiliary notes and acknowledgements
+image           : hash of the base64 encoding of an uploaded specimen image
+reason          : description of why the update is suggested
+
+await contract.submitTransaction('SuggestUpdate', guid, collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, conditionDate, notes, image, reason)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 ApproveTransaction
 
-Approves a PendingTransaction and submits it to the blockchain
+Approves a PendingTransaction for a given specimen and removes the PendingTransaction from that specimen's current list of PendingTransactions
+
+guid              : guid of the specimen for which the PendingTransaction will be approved
+username          : username of the user approving the PendingTransaction (user must have a role which could initiate the PendingTransaction or the transaction will fail)
+transactionIndex  : index within the list of pending transactions corresponding to the pending transaction that should be approved (the oldest PendingTransaction will have index 0)
+
+await contract.submitTransaction('ApproveTransaction', guid, username, '0')
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
 DenyTransaction
 
-Denies a PendingTransaction and removes it from the current list of PendingTransactions
+Denies a PendingTransaction for a given specimen and removes it from that specimen's current list of PendingTransactions
+
+guid              : guid of the specimen for which the PendingTransaction will be denied
+username          : username of the user denying the PendingTransaction (user must have a role which can update specimen primary info for the collection which the specimen belongs to)
+transactionIndex  : index within the list of pending transactions corresponding to the pending transaction that should be denied (the oldest PendingTransaction will have index 0)
+
+await contract.submitTransaction('DenyTransaction', guid, username '0')
 
 ----------------------------------------------------------------------------------------------------------------------------------------------

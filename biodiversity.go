@@ -333,12 +333,21 @@ func (s *SmartContract) GrantPermission(ctx contractapi.TransactionContextInterf
 
 	role, ok := granter.Membership[collection]
 
+	granteeRole, granteeOk := user.Membership[collection]
+
+	if !granteeOk {
+		granteeRole = "P"
+	}
+
 	if ok {
 		if role != "M" && role != "C" {
 			return fmt.Errorf("%s is not a Manager of Curator of collection %s", granterName, collection)
 		}
 		if role == "C" && permission == "M" {
 			return fmt.Errorf("%s is a Curator for collection %s and cannot grant permission of Manager to %s", granterName, collection, username)
+		}
+		if role == "C" && granteeRole == "M" {
+			return fmt.Errorf("%s is a Curator for collection %s and cannot change permission of Manager %s", granterName, collection, username)
 		}
 	} else {
 		return fmt.Errorf("%s is not registered with collection %s", granterName, collection)

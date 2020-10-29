@@ -166,6 +166,16 @@ const allSpecimens = await contract.evaluateTransaction('QueryAllSpecimens');
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
+CouchQuery
+
+Fetches all specimens that result from a CouchDB query string and returns them as an array of JSON Specimen objects
+
+queryString : CouchDB formatted query string
+
+const querySpecimens = await contract.evaluateTransaction('CouchQuery', '{"selector":{"taxon":"Pygoplites diacanthus"}}')
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
 GetHistory
 
 Fetches the entire ledger history of a specified key and returns it as a JSON array of objects in the format {TxID, Value, Timestamp, IsDelete}

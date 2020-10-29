@@ -1264,6 +1264,36 @@ func (s *SmartContract) UpdateTaxonClass(ctx contractapi.TransactionContextInter
 
 }
 
+func (s *SmartContract) CouchQuery(ctx contractapi.TransactionContextInterface, queryString string) ([]Specimen, error) {
+	recordIterator, err := ctx.GetStub().GetQueryResult(queryString)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get record iterator from query string. %s", err.Error())
+	}
+	defer recordIterator.Close()
+
+	results := []Specimen{}
+
+	for recordIterator.HasNext() {
+		record, err := recordIterator.Next()
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get record from record iterator. %s", err.Error())
+		}
+
+		specimen := new(Specimen)
+
+		err = json.Unmarshal(record.Value, specimen)
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to unmarshal specimen. %s", err.Error())
+		}
+
+		results = append(results, *specimen)
+
+	}
+
+	return results, nil
+}
+
 func main() {
 	chaincode, err := contractapi.NewChaincode(new(SmartContract))
 

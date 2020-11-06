@@ -176,6 +176,19 @@ const querySpecimens = await contract.evaluateTransaction('CouchQuery', '{"selec
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
+CouchQueryPendingTransactions
+
+Fetches all PendingTransaction objects corresponding to the specimens that result from a CouchDB query string and returns them as an array of arrays of JSON PendingTransaction objects
+
+queryString : CouchDB formatted query string
+
+//This returns an array of arrays where each inner array contains all pending transactions corresponding to one specimen of the taxon "Pygoplites diacanthus".
+//If a specimen found by the couch query has no pending transactions, its corresponding inner array will be empty ([]).
+//If you execute both a CouchQuery and CouchQueryPendingTransactions with the same query string, the indexes between the two returned arrays will match up by specimen instance.
+const pendingTransactionsOfSpecimens = await contract.evaluateTransaction('CouchQueryPendingTransactions', '{"selector":{"taxon":"Pygoplites diacanthus"}}')
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
 GetHistory
 
 Fetches the entire ledger history of a specified key and returns it as a JSON array of objects in the format {TxID, Value, Timestamp, IsDelete}

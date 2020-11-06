@@ -1294,6 +1294,43 @@ func (s *SmartContract) CouchQuery(ctx contractapi.TransactionContextInterface, 
 	return results, nil
 }
 
+func (s *SmartContract) CouchQueryPendingTransactions(ctx contractapi.TransactionContextInterface, queryString string) ([][]PendingTransaction, error) {
+	recordIterator, err := ctx.GetStub().GetQueryResult(queryString)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get record iterator from query string. %s", err.Error())
+	}
+	defer recordIterator.Close()
+
+	results := [][]PendingTransaction{}
+
+	for recordIterator.HasNext() {
+		record, err := recordIterator.Next()
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get record from record iterator. %s", err.Error())
+		}
+
+		pendingTransactionsBytes, err := ctx.GetStub().GetState("pending" + record.Key)
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to read from world state. %s", err.Error())
+		}
+
+		pendingTransactions := []PendingTransaction{}
+
+		if pendingTransactionsBytes != nil {
+			err = json.Unmarshal(pendingTransactionsBytes, &pendingTransactions)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to unmarshal list of pending transactions from bytes. %s", err.Error())
+			}
+		}
+
+		results = append(results, pendingTransactions)
+
+	}
+
+	return results, nil
+}
+
 func main() {
 	chaincode, err := contractapi.NewChaincode(new(SmartContract))
 

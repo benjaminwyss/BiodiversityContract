@@ -83,6 +83,7 @@ loans           (string) : append-only list of loaned specimen parts
 grants          (string) : append-only list of granted specimen parts
 notes           (string) : append-only list of auxiliary notes and acknowledgements
 image           (string) : hash of the base64 encoding of an uploaded specimen image
+vandalizedTransactions ( [string] ) : list of transaction IDs corresponding to vandalized instances of the specimen's history.
 
 ----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -471,6 +472,30 @@ guid              : guid of the specimen for which the PendingTransaction will b
 username          : username of the user denying the PendingTransaction (user must have a role which can update specimen primary info for the collection which the specimen belongs to)
 transactionIndex  : index within the list of pending transactions corresponding to the pending transaction that should be denied (the oldest PendingTransaction will have index 0)
 
-await contract.submitTransaction('DenyTransaction', guid, username '0')
+await contract.submitTransaction('DenyTransaction', guid, username, '0')
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Hide
+
+Marks a specific historical record for a specimen as being vandalized so that it may be hidden in future historical queries
+
+guid      : guid of the specimen for which vandalism occured
+username  : username of the user unvandalizing the specimen's history (user must have a role which can update specimen secondary infor for the collection which the specimen belongs to)
+txid      : transaction id in which vandalism occured and should not be displayed in historical queries (you can obtain the txids for every update to a specimen with a QueryHistory of the specimen)
+
+await contract.submitTransaction('Hide', guid, username, txid)
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+Unhide
+
+Unmarks a specific historical record for a specimen as being vandalized so that it may be displayed again in future historical queries
+
+guid      : guid of the specimen for which a historical record is being unhidden
+username  : username of the user unhiding the specimen's history (user must have a role which can update specimen secondary infor for the collection which the specimen belongs to)
+txid      : transaction id which should be unhidden in historical queries (you can obtain the txids for every update to a specimen with a historical query of the specimen)
+
+await contract.submitTransaction('Unhide', guid, username, txid)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------

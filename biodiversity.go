@@ -17,28 +17,29 @@ type SmartContract struct {
 }
 
 type Specimen struct {
-	Collection      string `json:"collection"`
-	Updater         string `json:"updater"`
-	CatalogNumber   string `json:"catalogNumber"`
-	AccessionNumber string `json:"accessionNumber"`
-	CatalogDate     string `json:"catalogDate"`
-	Cataloger       string `json:"cataloger"`
-	Taxon           string `json:"taxon"`
-	Determiner      string `json:"determiner"`
-	DetermineDate   string `json:"determineDate"`
-	FieldNumber     string `json:"fieldNumber"`
-	FieldDate       string `json:"fieldDate"`
-	Collector       string `json:"collector"`
-	Location        string `json:"location"`
-	Latitude        string `json:"latitude"`
-	Longitude       string `json:"longitude"`
-	Habitat         string `json:"habitat"`
-	Preparation     string `json:"preparation"`
-	Condition       string `json:"condition"`
-	Loans           string `json:"loans"`
-	Grants          string `json:"grants"`
-	Notes           string `json:"notes"`
-	Image           string `json:"image"`
+	Collection             string   `json:"collection"`
+	Updater                string   `json:"updater"`
+	CatalogNumber          string   `json:"catalogNumber"`
+	AccessionNumber        string   `json:"accessionNumber"`
+	CatalogDate            string   `json:"catalogDate"`
+	Cataloger              string   `json:"cataloger"`
+	Taxon                  string   `json:"taxon"`
+	Determiner             string   `json:"determiner"`
+	DetermineDate          string   `json:"determineDate"`
+	FieldNumber            string   `json:"fieldNumber"`
+	FieldDate              string   `json:"fieldDate"`
+	Collector              string   `json:"collector"`
+	Location               string   `json:"location"`
+	Latitude               string   `json:"latitude"`
+	Longitude              string   `json:"longitude"`
+	Habitat                string   `json:"habitat"`
+	Preparation            string   `json:"preparation"`
+	Condition              string   `json:"condition"`
+	Loans                  string   `json:"loans"`
+	Grants                 string   `json:"grants"`
+	Notes                  string   `json:"notes"`
+	Image                  string   `json:"image"`
+	VandalizedTransactions []string `json:"vandalizedTransactions"`
 }
 
 type Collection struct {
@@ -134,7 +135,7 @@ func (s *SmartContract) Init(ctx contractapi.TransactionContextInterface) error 
 		return fmt.Errorf("Failed to put public to world state. %s", err.Error())
 	}
 
-	sampleSpecimen := Specimen{"KU Ornithology", "manager", "32581", "2002-IC-062", "06/19/2003", "Bentley, Andy C", "Pygoplites diacanthus", "Greenfield, David W", "", "G02-15", "01/27/2002", "", "Fiji, Viti Levu", "18.1483325958", "-178.3984985352", "Barrier reef off Suva Point north of wreck in main channel", "", "", "", "", "", ""}
+	sampleSpecimen := Specimen{"KU Ornithology", "manager", "32581", "2002-IC-062", "06/19/2003", "Bentley, Andy C", "Pygoplites diacanthus", "Greenfield, David W", "", "G02-15", "01/27/2002", "", "Fiji, Viti Levu", "18.1483325958", "-178.3984985352", "Barrier reef off Suva Point north of wreck in main channel", "", "", "", "", "", "", []string{}}
 	specimenBytes, _ := json.Marshal(sampleSpecimen)
 	err = ctx.GetStub().PutState("0", specimenBytes)
 
@@ -421,7 +422,7 @@ func (s *SmartContract) Create(ctx contractapi.TransactionContextInterface, guid
 		return fmt.Errorf("Failed to put to world state. %s", err.Error())
 	}
 
-	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, "", "", notes, image}
+	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, "", "", notes, image, []string{}}
 
 	specimenBytes, _ := json.Marshal(specimen)
 
@@ -570,7 +571,7 @@ func (s *SmartContract) Update(ctx contractapi.TransactionContextInterface, guid
 		}
 	}
 
-	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, oldSpecimen.Loans, oldSpecimen.Grants, notes, image}
+	specimen := Specimen{collection, updater, catalogNumber, accessionNumber, catalogDate, cataloger, taxon, determiner, determineDate, fieldNumber, fieldDate, collector, location, latitude, longitude, habitat, preparation, condition, oldSpecimen.Loans, oldSpecimen.Grants, notes, image, oldSpecimen.VandalizedTransactions}
 
 	//Check if an actual change was made
 	specimen.Updater = oldSpecimen.Updater
@@ -1103,6 +1104,11 @@ func (s *SmartContract) GetHistory(ctx contractapi.TransactionContextInterface, 
 
 	defer recordIterator.Close()
 
+	specimenBytes, err := ctx.GetStub().GetState(guid)
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(specimenBytes, specimen)
+
 	var buffer bytes.Buffer
 	buffer.WriteString("[")
 
@@ -1128,7 +1134,22 @@ func (s *SmartContract) GetHistory(ctx contractapi.TransactionContextInterface, 
 		if response.IsDelete {
 			buffer.WriteString("null")
 		} else {
-			buffer.WriteString(string(response.Value))
+			//check if the specimen history is hidden due to vandalism
+			hidden := false
+
+			for _, txid := range specimen.VandalizedTransactions {
+				if txid == response.TxId {
+					hidden = true
+					break
+				}
+			}
+
+			if hidden {
+				buffer.WriteString("\"Record hidden due to vandalism\"")
+			} else {
+				buffer.WriteString(string(response.Value))
+			}
+
 		}
 
 		buffer.WriteString(", \"Timestamp\":")
@@ -1148,6 +1169,108 @@ func (s *SmartContract) GetHistory(ctx contractapi.TransactionContextInterface, 
 	buffer.WriteString("]")
 
 	return buffer.String(), nil
+}
+
+func (s *SmartContract) Hide(ctx contractapi.TransactionContextInterface, guid string, username string, txid string) error {
+	specimenBytes, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if specimenBytes == nil {
+		return fmt.Errorf("%s does not exist", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(specimenBytes, specimen)
+
+	collectionBytes, err := ctx.GetStub().GetState(specimen.Collection)
+
+	collection := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collection)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collection.SecondaryUpdate, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to unvandalize historical versions of specimens", username, role, collection.SecondaryUpdate)
+	}
+
+	specimen.VandalizedTransactions = append(specimen.VandalizedTransactions, txid)
+
+	specimenBytes, _ = json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
+}
+
+func (s *SmartContract) Unhide(ctx contractapi.TransactionContextInterface, guid string, username string, txid string) error {
+	specimenBytes, err := ctx.GetStub().GetState(guid)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if specimenBytes == nil {
+		return fmt.Errorf("%s does not exist", guid)
+	}
+
+	checkUser, err := ctx.GetStub().GetState(username)
+
+	if err != nil {
+		return fmt.Errorf("Failed to read from world state. %s", err.Error())
+	}
+
+	if checkUser == nil {
+		return fmt.Errorf("%s does not exist", username)
+	}
+
+	specimen := new(Specimen)
+	_ = json.Unmarshal(specimenBytes, specimen)
+
+	collectionBytes, err := ctx.GetStub().GetState(specimen.Collection)
+
+	collection := new(Collection)
+	_ = json.Unmarshal(collectionBytes, collection)
+
+	user := new(User)
+	_ = json.Unmarshal(checkUser, user)
+
+	role, ok := user.Membership[specimen.Collection]
+
+	if !ok {
+		role = "P"
+	}
+
+	if !strings.Contains(collection.SecondaryUpdate, role) {
+		return fmt.Errorf("%s has role %s but role %s is required to unhide historical versions of specimens", username, role, collection.SecondaryUpdate)
+	}
+
+	for i, v := range specimen.VandalizedTransactions {
+		if v == txid {
+			specimen.VandalizedTransactions = append(specimen.VandalizedTransactions[:i], specimen.VandalizedTransactions[i+1:]...)
+		}
+	}
+
+	specimenBytes, _ = json.Marshal(specimen)
+
+	return ctx.GetStub().PutState(guid, specimenBytes)
 }
 
 func (s *SmartContract) QueryAllSpecimens(ctx contractapi.TransactionContextInterface) ([]QueryResult, error) {
